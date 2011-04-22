@@ -2,7 +2,7 @@ module AjaxfulRating # :nodoc:
   class StarsBuilder # :nodoc:
     include AjaxfulRating::Locale
     
-    attr_reader :rateable, :user, :options, :remote_options
+    attr_reader :rateable, :user, :options, :remote_options, :show_value
     
     def initialize(rateable, user_or_static, template, css_builder, options = {}, remote_options = {})
       @user = user_or_static unless user_or_static == :static
@@ -11,12 +11,14 @@ module AjaxfulRating # :nodoc:
     end
     
     def show_value
-      if options[:show_user_rating]
-        rate = rateable.rate_by(user, options[:dimension]) if user
-        rate ? rate.stars : 0
-      else
-        rateable.rate_average(true, options[:dimension])
-      end
+      @show_value ||= if options[:rate_value]
+                        options[:rate_value].to_i
+                      elsif options[:show_user_rating]
+                        rate = rateable.rate_by(user, options[:dimension]) if user
+                        rate ? rate.stars : 0
+                      else
+                        rateable.rate_average(true, options[:dimension])
+                      end
     end
     
     def render
@@ -73,20 +75,24 @@ module AjaxfulRating # :nodoc:
     end
     
     def star_tag(value)
-      already_rated = rateable.rated_by?(user, options[:dimension]) if user
       css_class = "stars-#{value}"
       @css_builder.rule(".ajaxful-rating .#{css_class}", {
         :width => "#{(value / rateable.class.max_stars.to_f) * 100}%",
         :zIndex => (rateable.class.max_stars + 2 - value).to_s
       })
       @template.content_tag(:li) do
-        if !options[:force_static] && (user && options[:current_user] == user &&
-          (!already_rated || rateable.axr_config[:allow_update]))
+        if options[:force_static]
+          @template.content_tag(:span, show_value, :class => css_class, :title => i18n(:current))
+        elsif !options[:force_static] && (user && options[:current_user] == user && (!already_rated || rateable.axr_config[:allow_update]))
           link_star_tag(value, css_class)
         else
           @template.content_tag(:span, show_value, :class => css_class, :title => i18n(:current))
         end
       end
+    end
+    
+    def already_rated
+      rateable.rated_by?(user, options[:dimension]) if user
     end
     
     def link_star_tag(value, css_class)
